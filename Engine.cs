@@ -19,6 +19,7 @@ public class Engine
 
     private Level _currentLevel = new();
     private PlayerObject? _player;
+    private int _lives = 5;
 
     private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
 
@@ -149,7 +150,30 @@ public class Engine
             var deltaY = Math.Abs(_player.Position.Y - tempGameObject.Position.Y);
             if (deltaX < 32 && deltaY < 32)
             {
-                _player.GameOver();
+        if (_lives > 0)
+        {
+            _lives--;
+            Console.WriteLine($"Ai pierdut o viata! Vieti ramase: {_lives}");
+            if (_lives == 0)
+            {
+                Console.WriteLine("Game Over!");
+                Environment.Exit(0);
+            }
+        }
+    
+    if (_lives <= 0)
+    {
+        if (_lives > 0)
+        {
+            _lives--;
+            Console.WriteLine($"Ai pierdut o viata! Vieti ramase: {_lives}");
+            if (_lives == 0)
+            {
+                Console.WriteLine("Game Over!");
+                Environment.Exit(0);
+            }
+        }
+    }
             }
         }
 
