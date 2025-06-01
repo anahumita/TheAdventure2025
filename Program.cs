@@ -21,13 +21,12 @@ public static class Program
         {
             var input = new Input(sdl);
             var gameRenderer = new GameRenderer(sdl, gameWindow);
-
-            var engine = new Engine(gameRenderer, input);
+            var timer = new Stopwatch();
+            var engine = new Engine(gameRenderer, input, timer);
             engine.SetupWorld();
 
             int score = 0;
             bool quit = false;
-            var timer = new Stopwatch();
             timer.Start();
 
             while (!quit)
@@ -35,8 +34,9 @@ public static class Program
                 if (timer.Elapsed.TotalSeconds >= 15)
                 {
                     Console.WriteLine("Timpul a expirat!");
-                    Console.WriteLine($"Scor final: {score}");
-                    Environment.Exit(0);
+
+                    break;
+                    
                 }
 
                 quit = input.ProcessInput();

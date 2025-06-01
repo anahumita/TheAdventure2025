@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Diagnostics;
+using System.Reflection;
 using System.Text.Json;
 using Silk.NET.Maths;
 using TheAdventure.Models;
@@ -24,14 +25,18 @@ public class Engine
     private int _heartTextureId = -1;
     private int _exitTextureId = -1;
     private Rectangle<int> _exitButtonRect;
+    private Stopwatch _timer;
+    private bool _isGameOver = false;
+
+
 
     private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
 
-    public Engine(GameRenderer renderer, Input input)
+    public Engine(GameRenderer renderer, Input input, Stopwatch timer)
     {
+        _timer = timer;
         _renderer = renderer;
         _input = input;
-
         _input.OnMouseClick += (_, coords) => HandleMouseClick(coords.x, coords.y);
     }
 
@@ -97,6 +102,9 @@ public class Engine
 
     public void ProcessFrame()
     {
+        if (_isGameOver)
+            return;
+
         var currentTime = DateTimeOffset.Now;
         var msSinceLastFrame = (currentTime - _lastUpdate).TotalMilliseconds;
         _lastUpdate = currentTime;
@@ -124,6 +132,13 @@ public class Engine
 
         if (addScore)
             _score += 5;
+
+        if (_timer.Elapsed.TotalSeconds >= 15 && !_isGameOver)
+        {
+            _isGameOver = true;
+            Console.WriteLine("Timpul a expirat!");
+        }
+
     }
 
     public void RenderFrame()
@@ -137,7 +152,9 @@ public class Engine
         RenderTerrain();
         RenderAllObjects();
 
+        int timeLeft = 15 - (int)_timer.Elapsed.TotalSeconds;
         _renderer.RenderTextCrossPlatform($"Score: {_score}", 10, 10);
+        _renderer.RenderTextCrossPlatform($"Timp rămas: {timeLeft}s", 20, 60);
 
         for (int i = 0; i < _lives; i++)
         {
@@ -148,7 +165,13 @@ public class Engine
 
         var srcExit = new Rectangle<int>(0, 0, 32, 32);
         _renderer.RenderTextureScreenSpace(_exitTextureId, srcExit, _exitButtonRect);
-
+        if (_isGameOver)
+        {
+            var message = "GAME OVER";
+            var centerX = _renderer.WindowSize.Width / 2 - 100;
+            var centerY = _renderer.WindowSize.Height / 2;
+            _renderer.RenderTextCrossPlatform(message, centerX, centerY);
+        }
         _renderer.PresentFrame();
     }
 
@@ -177,10 +200,11 @@ public class Engine
                 {
                     _lives--;
                     Console.WriteLine($"Ai pierdut o viata! Vieti ramase: {_lives}");
-                    if (_lives == 0)
+                    if (_lives == 0 && !_isGameOver)
                     {
+                        _isGameOver = true;
                         Console.WriteLine("Game Over!");
-                        Environment.Exit(0);
+                        
                     }
                 }
             }
@@ -242,4 +266,5 @@ public class Engine
         TemporaryGameObject bomb = new(spriteSheet, 2.1, (worldCoords.X, worldCoords.Y));
         _gameObjects.Add(bomb.Id, bomb);
     }
+  
 }
