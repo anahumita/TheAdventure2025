@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Text.Json;
 using Silk.NET.Maths;
 using TheAdventure.Models;
@@ -20,6 +20,10 @@ public class Engine
     private Level _currentLevel = new();
     private PlayerObject? _player;
     private int _lives = 5;
+    private int _score = 0;
+    private int _heartTextureId = -1;
+    private int _exitTextureId = -1;
+    private Rectangle<int> _exitButtonRect;
 
     private DateTimeOffset _lastUpdate = DateTimeOffset.Now;
 
@@ -28,28 +32,35 @@ public class Engine
         _renderer = renderer;
         _input = input;
 
-        _input.OnMouseClick += (_, coords) => AddBomb(coords.x, coords.y);
+        _input.OnMouseClick += (_, coords) => HandleMouseClick(coords.x, coords.y);
     }
 
     public void SetupWorld()
     {
+        var (screenWidth, screenHeight) = _renderer.WindowSize;
         _player = new(SpriteSheet.Load(_renderer, "Player.json", "Assets"), 100, 100);
+        _heartTextureId = _renderer.LoadTexture("Assets/heart.png", out _);
+        _exitTextureId = _renderer.LoadTexture("Assets/exit.png", out _);
+
+        var windowSize = _renderer.WindowSize;
+        _exitButtonRect = new Rectangle<int>(
+                                       screenWidth - 42,       
+                            screenHeight - 42,      
+                              32,
+                          32
+                      );
 
         var levelContent = File.ReadAllText(Path.Combine("Assets", "terrain.tmj"));
         var level = JsonSerializer.Deserialize<Level>(levelContent);
         if (level == null)
-        {
             throw new Exception("Failed to load level");
-        }
 
         foreach (var tileSetRef in level.TileSets)
         {
             var tileSetContent = File.ReadAllText(Path.Combine("Assets", tileSetRef.Source));
             var tileSet = JsonSerializer.Deserialize<TileSet>(tileSetContent);
             if (tileSet == null)
-            {
                 throw new Exception("Failed to load tile set");
-            }
 
             foreach (var tile in tileSet.Tiles)
             {
@@ -60,15 +71,8 @@ public class Engine
             _loadedTileSets.Add(tileSet.Name, tileSet);
         }
 
-        if (level.Width == null || level.Height == null)
-        {
+        if (level.Width == null || level.Height == null || level.TileWidth == null || level.TileHeight == null)
             throw new Exception("Invalid level dimensions");
-        }
-
-        if (level.TileWidth == null || level.TileHeight == null)
-        {
-            throw new Exception("Invalid tile dimensions");
-        }
 
         _renderer.SetWorldBounds(new Rectangle<int>(0, 0, level.Width.Value * level.TileWidth.Value,
             level.Height.Value * level.TileHeight.Value));
@@ -78,6 +82,19 @@ public class Engine
         _scriptEngine.LoadAll(Path.Combine("Assets", "Scripts"));
     }
 
+    private void HandleMouseClick(int x, int y)
+    {
+        if (_exitButtonRect.Contains(new Vector2D<int>(x, y)))
+        {
+            Console.WriteLine("Exit button clicked. Exiting game...");
+            Environment.Exit(0);
+        }
+        else
+        {
+            AddBomb(x, y);
+        }
+    }
+
     public void ProcessFrame()
     {
         var currentTime = DateTimeOffset.Now;
@@ -85,29 +102,28 @@ public class Engine
         _lastUpdate = currentTime;
 
         if (_player == null)
-        {
             return;
-        }
 
         double up = _input.IsUpPressed() ? 1.0 : 0.0;
         double down = _input.IsDownPressed() ? 1.0 : 0.0;
         double left = _input.IsLeftPressed() ? 1.0 : 0.0;
         double right = _input.IsRightPressed() ? 1.0 : 0.0;
+
         bool isAttacking = _input.IsKeyAPressed() && (up + down + left + right <= 1);
         bool addBomb = _input.IsKeyBPressed();
+        bool addScore = _input.IsTabPressed();
 
         _player.UpdatePosition(up, down, left, right, 48, 48, msSinceLastFrame);
         if (isAttacking)
-        {
             _player.Attack();
-        }
-        
+
         _scriptEngine.ExecuteAll(this);
 
         if (addBomb)
-        {
             AddBomb(_player.Position.X, _player.Position.Y, false);
-        }
+
+        if (addScore)
+            _score += 5;
     }
 
     public void RenderFrame()
@@ -121,6 +137,18 @@ public class Engine
         RenderTerrain();
         RenderAllObjects();
 
+        _renderer.RenderTextCrossPlatform($"Score: {_score}", 10, 10);
+
+        for (int i = 0; i < _lives; i++)
+        {
+            var src = new Rectangle<int>(0, 0, 32, 32);
+            var dst = new Rectangle<int>(10 + i * 40, 10, 32, 32);
+            _renderer.RenderTextureScreenSpace(_heartTextureId, src, dst);
+        }
+
+        var srcExit = new Rectangle<int>(0, 0, 32, 32);
+        _renderer.RenderTextureScreenSpace(_exitTextureId, srcExit, _exitButtonRect);
+
         _renderer.PresentFrame();
     }
 
@@ -131,9 +159,7 @@ public class Engine
         {
             gameObject.Render(_renderer);
             if (gameObject is TemporaryGameObject { IsExpired: true } tempGameObject)
-            {
                 toRemove.Add(tempGameObject.Id);
-            }
         }
 
         foreach (var id in toRemove)
@@ -141,39 +167,22 @@ public class Engine
             _gameObjects.Remove(id, out var gameObject);
 
             if (_player == null)
-            {
                 continue;
-            }
 
-            var tempGameObject = (TemporaryGameObject)gameObject!;
-            var deltaX = Math.Abs(_player.Position.X - tempGameObject.Position.X);
-            var deltaY = Math.Abs(_player.Position.Y - tempGameObject.Position.Y);
-            if (deltaX < 32 && deltaY < 32)
+            if (gameObject is TemporaryGameObject tempGameObject)
             {
-        if (_lives > 0)
-        {
-            _lives--;
-            Console.WriteLine($"Ai pierdut o viata! Vieti ramase: {_lives}");
-            if (_lives == 0)
-            {
-                Console.WriteLine("Game Over!");
-                Environment.Exit(0);
-            }
-        }
-    
-    if (_lives <= 0)
-    {
-        if (_lives > 0)
-        {
-            _lives--;
-            Console.WriteLine($"Ai pierdut o viata! Vieti ramase: {_lives}");
-            if (_lives == 0)
-            {
-                Console.WriteLine("Game Over!");
-                Environment.Exit(0);
-            }
-        }
-    }
+                var deltaX = Math.Abs(_player.Position.X - tempGameObject.Position.X);
+                var deltaY = Math.Abs(_player.Position.Y - tempGameObject.Position.Y);
+                if (deltaX < 32 && deltaY < 32 && _lives > 0)
+                {
+                    _lives--;
+                    Console.WriteLine($"Ai pierdut o viata! Vieti ramase: {_lives}");
+                    if (_lives == 0)
+                    {
+                        Console.WriteLine("Game Over!");
+                        Environment.Exit(0);
+                    }
+                }
             }
         }
 
@@ -184,26 +193,25 @@ public class Engine
     {
         foreach (var currentLayer in _currentLevel.Layers)
         {
+            if (currentLayer.Width == null || currentLayer.Data == null)
+                continue;
+
             for (int i = 0; i < _currentLevel.Width; ++i)
             {
                 for (int j = 0; j < _currentLevel.Height; ++j)
                 {
-                    int? dataIndex = j * currentLayer.Width + i;
-                    if (dataIndex == null)
-                    {
+                    int dataIndex = j * currentLayer.Width.Value + i;
+                    if (dataIndex < 0 || dataIndex >= currentLayer.Data.Count)
                         continue;
-                    }
 
-                    var currentTileId = currentLayer.Data[dataIndex.Value] - 1;
-                    if (currentTileId == null)
-                    {
+                    int? currentTileIdNullable = currentLayer.Data[dataIndex] - 1;
+                    if (!currentTileIdNullable.HasValue || !_tileIdMap.ContainsKey(currentTileIdNullable.Value))
                         continue;
-                    }
 
-                    var currentTile = _tileIdMap[currentTileId.Value];
+                    var currentTile = _tileIdMap[currentTileIdNullable.Value];
 
-                    var tileWidth = currentTile.ImageWidth ?? 0;
-                    var tileHeight = currentTile.ImageHeight ?? 0;
+                    int tileWidth = currentTile.ImageWidth ?? 0;
+                    int tileHeight = currentTile.ImageHeight ?? 0;
 
                     var sourceRect = new Rectangle<int>(0, 0, tileWidth, tileHeight);
                     var destRect = new Rectangle<int>(i * tileWidth, j * tileHeight, tileWidth, tileHeight);
@@ -218,16 +226,11 @@ public class Engine
         foreach (var gameObject in _gameObjects.Values)
         {
             if (gameObject is RenderableGameObject renderableGameObject)
-            {
                 yield return renderableGameObject;
-            }
         }
     }
 
-    public (int X, int Y) GetPlayerPosition()
-    {
-        return _player!.Position;
-    }
+    public (int X, int Y) GetPlayerPosition() => _player!.Position;
 
     public void AddBomb(int X, int Y, bool translateCoordinates = true)
     {

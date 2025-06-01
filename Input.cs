@@ -18,7 +18,7 @@ public unsafe class Input
         ReadOnlySpan<byte> keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
         return keyboardState[(int)KeyCode.S] == 1;
     }
-    
+
 
     public bool IsLeftPressed()
     {
@@ -181,5 +181,12 @@ public unsafe class Input
     {
         ReadOnlySpan<byte> keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
         return keyboardState[(int)KeyCode.Space] == 1;
+    }
+
+
+    public bool IsTabPressed()
+    {
+        ReadOnlySpan<byte> keyboardState = new(_sdl.GetKeyboardState(null), (int)KeyCode.Count);
+        return keyboardState[(int)KeyCode.Tab] == 1;
     }
 }
